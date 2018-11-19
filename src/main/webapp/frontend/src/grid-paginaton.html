@@ -1,0 +1,50 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/plutonium-pagination/plutonium-pagination.html">
+
+<dom-module id="grid-paginaton">
+    <template>
+<style include="shared-styles">
+            :host {
+                display: block;
+            }
+        </style>
+<plutonium-pagination page="{{page}}" total="{{total}}" limit="{{limit}}" size="{{size}}"></plutonium-pagination>
+
+</template>
+    <script>
+        class GridPaginaton extends Polymer.Element {
+            static get is() {
+                return 'grid-paginaton';
+            }
+            static get properties() {
+                return {
+                    /** Per-page limit of the elements. */
+                    limit: {
+                        type: Number,
+                        notify: true,
+                        value: () => 10
+                    },
+                    /** Total count of the elements. */
+                    total: {
+                        type: Number,
+                        notify: true,
+                        value: () => 121
+                    },
+                    /** Current page. */
+                    page: {
+                        type: Number,
+                        notify: true,
+                        value: () => 1
+                    },
+                    /** Count of the pages displayed before or after the current page. */
+                    size: {
+                        type: Number,
+                        notify: true,
+                        value: () => 2
+                    }
+                };
+            }
+        }
+        customElements.define(GridPaginaton.is, GridPaginaton);
+    </script>
+</dom-module>
