@@ -6,6 +6,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.ListDataProvider;
 import com.vaadin.flow.router.Route;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * The main view contains a button and a click listener.
@@ -24,6 +25,9 @@ public class MainView extends VerticalLayout {
 
 	private TextField pageTextField = new TextField("Page");
 
+	private TextField filterField = new TextField("Filter by Address");
+
+
 	public MainView() {
 		grid = new PaginatedGrid<>();
 
@@ -33,13 +37,19 @@ public class MainView extends VerticalLayout {
 		grid.addColumn(Address::getName).setHeader("Name").setSortable(true);
 		grid.addColumn(Address::getAddress).setHeader("Address").setSortable(true);
 
-		grid.setItems(dataProvider.getItems());
+
 		grid.setPageSize(16);
 		grid.setPaginatorSize(5);
 
-		HorizontalLayout bottomLayout = new HorizontalLayout(pageSizeTextField, paginatorSizeTextField, pageTextField);
+		HorizontalLayout bottomLayout = new HorizontalLayout(pageSizeTextField, paginatorSizeTextField, pageTextField, filterField);
 		bottomLayout.setWidth("100%");
 		this.add(bottomLayout, grid);
+
+		grid.setDataProvider(dataProvider);
+
+		grid.addPageChangeListener(event -> {
+			Notification.show("Page changed from " + event.getOldPage() + " to " + event.getNewPage());
+		});
 
 		pageSizeTextField.addValueChangeListener(e -> {
 			try {
@@ -70,6 +80,18 @@ public class MainView extends VerticalLayout {
 			} catch (Exception e2) {
 				Notification.show("Number format is wrong!");
 			}
+		});
+
+		filterField.addValueChangeListener(event -> {
+				dataProvider.setFilter(address -> {
+					if(StringUtils.isEmpty(event.getValue())){
+						return true;
+					}
+					return  address.getAddress() != null && address.getAddress().toLowerCase().contains(event.getValue().toLowerCase());
+				});
+
+
+
 		});
 
 	}

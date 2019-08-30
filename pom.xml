@@ -56,7 +56,7 @@
 		<dependency>
 		    <groupId>org.vaadin.klaudeta</groupId>
 		    <artifactId>grid-pagination</artifactId>
-		    <version>1.0.0</version>
+		    <version>1.0.1</version>
 		</dependency>
 		
         <!-- Added to provide logging output as Flow uses -->
