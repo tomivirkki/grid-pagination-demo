@@ -1,35 +1,52 @@
 package org.vaadin.klaudeta;
 
+import java.util.Set;
+
+import com.vaadin.flow.component.grid.Grid.MultiSortPriority;
+import com.vaadin.flow.component.grid.Grid.SelectionMode;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.ListDataProvider;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.Route;
 import org.apache.commons.lang3.StringUtils;
 
-/**
- * The main view contains a button and a click listener.
- */
 @Route("")
 public class MainView extends VerticalLayout {
 
 
 	private static final ListDataProvider<Address> dataProvider = new ListDataProvider<>(AddressMock.addresses);
 
-	private PaginatedGrid<Address> grid;
+	private PaginatedGrid<Address, String> grid;
 
-	private TextField pageSizeTextField = new TextField("Page Size");
+	private IntegerField pageSizeField = new IntegerField("Page Size");
 
-	private TextField paginatorSizeTextField = new TextField("Paginator Size");
+	private IntegerField paginatorSizeField = new IntegerField("Paginator Size");
 
-	private TextField pageTextField = new TextField("Page");
+	private IntegerField pageField = new IntegerField("Page");
 
 	private TextField filterField = new TextField("Filter by Address");
 
+	// Grid automatically clears the selection when certain properties change,
+	// so we need to store it in the app logic and restore it when necessary
+	private Set<Address> selection;
 
 	public MainView() {
 		grid = new PaginatedGrid<>();
+		selection = grid.getSelectedItems();
+		grid.setSelectionMode(SelectionMode.MULTI).addSelectionListener(e -> {
+			if (e.isFromClient()) {
+				// The selection change was user-originated. Cache the selection.
+				selection = e.getAllSelectedItems();
+			} else {
+				// The selection changed due to a page, sort order or filter change, restore the
+				// cached selection
+				grid.asMultiSelect().select(selection);
+			}
+		});
 
 		grid.addColumn(Address::getId).setHeader("ID");
 		grid.addColumn(Address::getCountry).setHeader("Country").setSortable(true);
@@ -40,8 +57,9 @@ public class MainView extends VerticalLayout {
 
 		grid.setPageSize(16);
 		grid.setPaginatorSize(5);
+		grid.setMultiSort(true, MultiSortPriority.APPEND);
 
-		HorizontalLayout bottomLayout = new HorizontalLayout(pageSizeTextField, paginatorSizeTextField, pageTextField, filterField);
+		HorizontalLayout bottomLayout = new HorizontalLayout(pageSizeField, paginatorSizeField, pageField, filterField);
 		bottomLayout.setWidth("100%");
 		this.add(bottomLayout, grid);
 
@@ -51,37 +69,35 @@ public class MainView extends VerticalLayout {
 			Notification.show("Page changed from " + event.getOldPage() + " to " + event.getNewPage());
 		});
 
-		pageSizeTextField.addValueChangeListener(e -> {
-			try {
-				if (e.getValue() == null || Integer.valueOf(e.getValue()) < 1)
-					return;
-				grid.setPageSize(Integer.valueOf(e.getValue()));
-			} catch (Exception e2) {
-				Notification.show("Number format is wrong!");
-			}
+		pageSizeField.setValue(grid.getPageSize());
+		pageSizeField.setMin(1);
+		pageSizeField.setStepButtonsVisible(true);
+		pageSizeField.setValueChangeMode(ValueChangeMode.EAGER);
+		pageSizeField.addValueChangeListener(e -> {
+			grid.setPageSize(e.getValue());
+			grid.setPage(1);
 		});
 
-		paginatorSizeTextField.addValueChangeListener(e -> {
-			try {
-				if (e.getValue() == null || Integer.valueOf(e.getValue()) < 1)
-					return;
-
-				grid.setPaginatorSize(Integer.valueOf(e.getValue()));
-			} catch (Exception e2) {
-				Notification.show("Number format is wrong!");
-			}
+		paginatorSizeField.setValue(4);
+		grid.setPaginatorSize(paginatorSizeField.getValue());
+		paginatorSizeField.setMin(1);
+		paginatorSizeField.setValueChangeMode(ValueChangeMode.EAGER);
+		paginatorSizeField.setStepButtonsVisible(true);
+		paginatorSizeField.addValueChangeListener(e -> {
+			grid.setPaginatorSize(e.getValue());
 		});
 
-		pageTextField.addValueChangeListener(e -> {
-			try {
-				if (e.getValue() == null || Integer.valueOf(e.getValue()) < 1)
-					return;
-				grid.setPage(Integer.valueOf(e.getValue()));
-			} catch (Exception e2) {
-				Notification.show("Number format is wrong!");
-			}
+		pageField.setValue(grid.getPage());
+		pageField.setMin(1);
+		pageField.setValueChangeMode(ValueChangeMode.EAGER);
+		pageField.setStepButtonsVisible(true);
+		pageField.addValueChangeListener(e -> {
+			grid.setPage(e.getValue());
 		});
+		grid.addPageChangeListener(e -> pageField.setValue(e.getNewPage()));
 
+		filterField.setValueChangeMode(ValueChangeMode.EAGER);
+		filterField.setClearButtonVisible(true);
 		filterField.addValueChangeListener(event -> {
 				dataProvider.setFilter(address -> {
 					if(StringUtils.isEmpty(event.getValue())){
@@ -89,7 +105,7 @@ public class MainView extends VerticalLayout {
 					}
 					return  address.getAddress() != null && address.getAddress().toLowerCase().contains(event.getValue().toLowerCase());
 				});
-
+				grid.setPage(1);
 
 
 		});
