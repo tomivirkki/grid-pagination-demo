@@ -1,26 +1,23 @@
 package org.vaadin.klaudeta;
 
-import java.util.Set;
+import java.util.stream.Stream;
 
+import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.Grid.MultiSortPriority;
 import com.vaadin.flow.component.grid.Grid.SelectionMode;
-import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.provider.ListDataProvider;
+import com.vaadin.flow.data.provider.CallbackDataProvider;
+import com.vaadin.flow.data.provider.DataProvider;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.Route;
-import org.apache.commons.lang3.StringUtils;
 
 @Route("")
 public class MainView extends VerticalLayout {
 
-
-	private static final ListDataProvider<Address> dataProvider = new ListDataProvider<>(AddressMock.addresses);
-
-	private PaginatedGrid<Address, String> grid;
+	private Grid<Address> grid;
 
 	private IntegerField pageSizeField = new IntegerField("Page Size");
 
@@ -30,23 +27,42 @@ public class MainView extends VerticalLayout {
 
 	private TextField filterField = new TextField("Filter by Address");
 
-	// Grid automatically clears the selection when certain properties change,
-	// so we need to store it in the app logic and restore it when necessary
-	private Set<Address> selection;
+	private MyPagination pagination = new MyPagination();
+
+	private DataProvider<Address, String> dataProvider = new CallbackDataProvider<>(
+			query -> {
+				// Data provider requires these to be called even though they are not used
+				// in this example
+				query.getLimit();
+				query.getOffset();
+
+				// Filtered and sorted list of items
+				var items = getFilteredItems(filterField.getValue()).sorted(
+						query.getSortingComparator().orElse((a, b) -> 0));
+
+				// Return the items for the current page
+				var startIndex = (pageField.getValue() - 1) * grid.getPageSize();
+				return items.skip(startIndex).limit(grid.getPageSize());
+			},
+			query -> {
+				// Total count of filtered items
+				var filteredItemCount = getFilteredItems(filterField.getValue()).count();
+
+				// Return the number of items for the current page
+				var startIndex = (pageField.getValue() - 1) * grid.getPageSize();
+				return (int) Math.min(filteredItemCount - startIndex, grid.getPageSize());
+			});
+
+	private static Stream<Address> getFilteredItems(String filterText) {
+		// Filter the backend items based on the given filter text
+		return AddressMock.addresses.stream()
+				.filter(address -> filterText.isEmpty() || address.getAddress() != null
+						&& address.getAddress().toLowerCase().contains(filterText.toLowerCase()));
+	}
 
 	public MainView() {
-		grid = new PaginatedGrid<>();
-		selection = grid.getSelectedItems();
-		grid.setSelectionMode(SelectionMode.MULTI).addSelectionListener(e -> {
-			if (e.isFromClient()) {
-				// The selection change was user-originated. Cache the selection.
-				selection = e.getAllSelectedItems();
-			} else {
-				// The selection changed due to a page, sort order or filter change, restore the
-				// cached selection
-				grid.asMultiSelect().select(selection);
-			}
-		});
+		grid = new Grid<>();
+		grid.setSelectionMode(SelectionMode.MULTI);
 
 		grid.addColumn(Address::getId).setHeader("ID");
 		grid.addColumn(Address::getCountry).setHeader("Country").setSortable(true);
@@ -54,61 +70,72 @@ public class MainView extends VerticalLayout {
 		grid.addColumn(Address::getName).setHeader("Name").setSortable(true);
 		grid.addColumn(Address::getAddress).setHeader("Address").setSortable(true);
 
-
+		grid.setAllRowsVisible(true);
 		grid.setPageSize(16);
-		grid.setPaginatorSize(5);
+		pagination.setSize(5);
+		pagination.setPage(1);
 		grid.setMultiSort(true, MultiSortPriority.APPEND);
 
-		HorizontalLayout bottomLayout = new HorizontalLayout(pageSizeField, paginatorSizeField, pageField, filterField);
-		bottomLayout.setWidth("100%");
-		this.add(bottomLayout, grid);
+		HorizontalLayout fieldsLayout = new HorizontalLayout(pageSizeField, paginatorSizeField, pageField, filterField);
+		fieldsLayout.setWidth("100%");
+		this.add(fieldsLayout, grid, pagination);
 
 		grid.setDataProvider(dataProvider);
-
-		grid.addPageChangeListener(event -> {
-			Notification.show("Page changed from " + event.getOldPage() + " to " + event.getNewPage());
-		});
 
 		pageSizeField.setValue(grid.getPageSize());
 		pageSizeField.setMin(1);
 		pageSizeField.setStepButtonsVisible(true);
 		pageSizeField.setValueChangeMode(ValueChangeMode.EAGER);
 		pageSizeField.addValueChangeListener(e -> {
+			pagination.setPage(1);
 			grid.setPageSize(e.getValue());
-			grid.setPage(1);
+			updateMaxPage();
 		});
 
 		paginatorSizeField.setValue(4);
-		grid.setPaginatorSize(paginatorSizeField.getValue());
+		pagination.setSize(paginatorSizeField.getValue());
 		paginatorSizeField.setMin(1);
 		paginatorSizeField.setValueChangeMode(ValueChangeMode.EAGER);
 		paginatorSizeField.setStepButtonsVisible(true);
 		paginatorSizeField.addValueChangeListener(e -> {
-			grid.setPaginatorSize(e.getValue());
+			pagination.setSize(e.getValue());
+			pagination.refresh();
 		});
 
-		pageField.setValue(grid.getPage());
+		pageField.setValue(pagination.getPage());
 		pageField.setMin(1);
 		pageField.setValueChangeMode(ValueChangeMode.EAGER);
 		pageField.setStepButtonsVisible(true);
 		pageField.addValueChangeListener(e -> {
-			grid.setPage(e.getValue());
+			pagination.setPage(e.getValue());
+			grid.getDataProvider().refreshAll();
 		});
-		grid.addPageChangeListener(e -> pageField.setValue(e.getNewPage()));
+		pagination.addPageChangeListener(e -> {
+			pageField.setValue(e.getNewPage());
+		});
 
 		filterField.setValueChangeMode(ValueChangeMode.EAGER);
 		filterField.setClearButtonVisible(true);
 		filterField.addValueChangeListener(event -> {
-				dataProvider.setFilter(address -> {
-					if(StringUtils.isEmpty(event.getValue())){
-						return true;
-					}
-					return  address.getAddress() != null && address.getAddress().toLowerCase().contains(event.getValue().toLowerCase());
-				});
-				grid.setPage(1);
-
-
+			pagination.setPage(1);
+			updateMaxPage();
+			grid.getDataProvider().refreshAll();
 		});
 
+		updateMaxPage();
+	}
+
+	private void updateMaxPage() {
+		var filteredItemCount = getFilteredItems(filterField.getValue()).count();
+		var maxPage = (int) Math.floor(filteredItemCount / grid.getPageSize()) + 1;
+
+		// Update the pagination component max page
+		pagination.setTotal(maxPage);
+
+		// Update the page integer field max value
+		pageField.setMax(maxPage);
+		if (pageField.getValue() > maxPage) {
+			pageField.setValue(maxPage);
+		}
 	}
 }
